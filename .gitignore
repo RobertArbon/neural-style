@@ -4,3 +4,7 @@ env/
 __pycache__
 *.pyc
 *.jpg
+output/
+styles/
+content/
+.ipynb_checkpoints/
