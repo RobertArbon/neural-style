@@ -8,3 +8,5 @@ output/
 styles/
 content/
 .ipynb_checkpoints/
+*.png
+*.tex
