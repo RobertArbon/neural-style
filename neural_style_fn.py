@@ -138,46 +138,46 @@ def fmt_imsave(fmt, iteration):
         raise ValueError("illegal format string '{}'".format(fmt))
 
 
-def neural_style(content, styles, output,
+def neural_style(content, styles, output=None,
                  iterations=ITERATIONS, print_iterations=None,
                  checkpoint_output=None, checkpoint_iterations=None,
                  progress_write=False, progress_plot=False,
-                 width=None, style_scales=STYLE_SCALE,
+                 width=None, style_scales=None,
                  network=VGG_PATH, content_weight_blend=CONTENT_WEIGHT_BLEND,
                  content_weight=CONTENT_WEIGHT,style_weight=STYLE_WEIGHT,
                  style_layer_weight_exp=STYLE_LAYER_WEIGHT_EXP, style_blend_weights=None,
                  tv_weight=TV_WEIGHT, learning_rate=LEARNING_RATE,
                  beta1=BETA1, beta2=BETA2, epsilon=EPSILON, initial=None,
                  initial_noiseblend=None, preserve_colors=False, pooling=POOLING,
-                 overwrite=False):
+                 overwrite=False, progress_print=False):
 
     # https://stackoverflow.com/a/42121886
     key = 'TF_CPP_MIN_LOG_LEVEL'
     if key not in os.environ:
         os.environ[key] = '2'
 
-    parser = build_parser()
-    options = parser.parse_args()
+    # parser = build_parser()
+    # options = parser.parse_args()
 
-    if not os.path.isfile(options.network):
-        parser.error("Network %s does not exist. (Did you forget to "
-                     "download it?)" % options.network)
+    if not os.path.isfile(network):
+        raise ValueError("Network %s does not exist. (Did you forget to "
+                         "download it?)" % network)
 
-    if [options.checkpoint_iterations,
-        options.checkpoint_output].count(None) == 1:
-        parser.error("use either both of checkpoint_output and "
-                     "checkpoint_iterations or neither")
+    if [checkpoint_iterations,
+        checkpoint_output].count(None) == 1:
+        raise ValueError("use either both of checkpoint_output and "
+                         "checkpoint_iterations or neither")
 
-    if options.checkpoint_output is not None:
-        if re.match(r'^.*(\{.*\}|%.*).*$', options.checkpoint_output) is None:
-            parser.error("To save intermediate images, the checkpoint_output "
-                         "parameter must contain placeholders (e.g. "
-                         "`foo_{}.jpg` or `foo_%d.jpg`")
+    if checkpoint_output is not None:
+        if re.match(r'^.*(\{.*\}|%.*).*$', checkpoint_output) is None:
+            raise ValueError("To save intermediate images, the checkpoint_output "
+                             "parameter must contain placeholders (e.g. "
+                             "`foo_{}.jpg` or `foo_%d.jpg`")
 
-    content_image = imread(options.content)
-    style_images = [imread(style) for style in options.styles]
+    content_image = imread(content)
+    style_images = [imread(style) for style in styles]
 
-    width = options.width
+    # width = width
     if width is not None:
         new_shape = (int(math.floor(float(content_image.shape[0]) /
                 content_image.shape[1] * width)), width)
@@ -185,12 +185,12 @@ def neural_style(content, styles, output,
     target_shape = content_image.shape
     for i in range(len(style_images)):
         style_scale = STYLE_SCALE
-        if options.style_scales is not None:
-            style_scale = options.style_scales[i]
+        if style_scales is not None:
+            style_scale = style_scales[i]
         style_images[i] = scipy.misc.imresize(style_images[i], style_scale *
                 target_shape[1] / style_images[i].shape[1])
 
-    style_blend_weights = options.style_blend_weights
+    # style_blend_weights = style_blend_weights
     if style_blend_weights is None:
         # default is equal weights
         style_blend_weights = [1.0/len(style_images) for _ in style_images]
@@ -199,57 +199,60 @@ def neural_style(content, styles, output,
         style_blend_weights = [weight/total_blend_weight
                                for weight in style_blend_weights]
 
-    initial = options.initial
+    # initial = initial
     if initial is not None:
         initial = scipy.misc.imresize(imread(initial), content_image.shape[:2])
         # Initial guess is specified, but not noiseblend - no noise should be blended
-        if options.initial_noiseblend is None:
-            options.initial_noiseblend = 0.0
+        if initial_noiseblend is None:
+            initial_noiseblend = 0.0
     else:
         # Neither inital, nor noiseblend is provided, falling back to random
         # generated initial guess
-        if options.initial_noiseblend is None:
-            options.initial_noiseblend = 1.0
-        if options.initial_noiseblend < 1.0:
+        if initial_noiseblend is None:
+            initial_noiseblend = 1.0
+        if initial_noiseblend < 1.0:
             initial = content_image
 
-    # try saving a dummy image to the output path to make sure that it's writable
-    if os.path.isfile(options.output) and not options.overwrite:
-        raise IOError("%s already exists, will not replace it without "
-                      "the '--overwrite' flag" % options.output)
-    try:
-        imsave(options.output, np.zeros((500, 500, 3)))
-    except:
-        raise IOError('%s is not writable or does not have a valid file '
-                      'extension for an image file' % options.output)
+    # We don't always want to write the image to disk so there's no need to check the output path
+    if output is not None:
+        # try saving a dummy image to the output path to make sure that it's writable
+        if os.path.isfile(output) and not overwrite:
+            raise IOError("%s already exists, will not replace it without "
+                          "the '--overwrite' flag" % output)
+        try:
+            imsave(output, np.zeros((500, 500, 3)))
+        except:
+            raise IOError('%s is not writable or does not have a valid file '
+                          'extension for an image file' % output)
 
     loss_arrs = None
     for iteration, image, loss_vals in stylize(
-        network=options.network,
+        network=network,
         initial=initial,
-        initial_noiseblend=options.initial_noiseblend,
+        initial_noiseblend=initial_noiseblend,
         content=content_image,
         styles=style_images,
-        preserve_colors=options.preserve_colors,
-        iterations=options.iterations,
-        content_weight=options.content_weight,
-        content_weight_blend=options.content_weight_blend,
-        style_weight=options.style_weight,
-        style_layer_weight_exp=options.style_layer_weight_exp,
+        preserve_colors=preserve_colors,
+        iterations=iterations,
+        content_weight=content_weight,
+        content_weight_blend=content_weight_blend,
+        style_weight=style_weight,
+        style_layer_weight_exp=style_layer_weight_exp,
         style_blend_weights=style_blend_weights,
-        tv_weight=options.tv_weight,
-        learning_rate=options.learning_rate,
-        beta1=options.beta1,
-        beta2=options.beta2,
-        epsilon=options.epsilon,
-        pooling=options.pooling,
-        print_iterations=options.print_iterations,
-        checkpoint_iterations=options.checkpoint_iterations,
+        tv_weight=tv_weight,
+        learning_rate=learning_rate,
+        beta1=beta1,
+        beta2=beta2,
+        epsilon=epsilon,
+        pooling=pooling,
+        print_iterations=print_iterations,
+        checkpoint_iterations=checkpoint_iterations,
+        progress_print=progress_print
     ):
-        if (image is not None) and (options.checkpoint_output is not None):
-            imsave(fmt_imsave(options.checkpoint_output, iteration), image)
+        if (image is not None) and (checkpoint_output is not None):
+            imsave(fmt_imsave(checkpoint_output, iteration), image)
         if (loss_vals is not None) \
-                and (options.progress_plot or options.progress_write):
+                and (progress_plot or progress_write):
             if loss_arrs is None:
                 itr = []
                 loss_arrs = OrderedDict((key, []) for key in loss_vals.keys())
@@ -257,18 +260,15 @@ def neural_style(content, styles, output,
                 loss_arrs[key].append(val)
             itr.append(iteration)
 
-    imsave(options.output, image)
-
-    if options.progress_write:
-        fn = "{}/progress.txt".format(os.path.dirname(options.output))
+    if progress_write:
+        fn = "{}/progress.txt".format(os.path.dirname(output))
         tmp = np.empty((len(itr), len(loss_arrs)+1), dtype=float)
         tmp[:,0] = np.array(itr)
         for ii,val in enumerate(loss_arrs.values()):
             tmp[:,ii+1] = np.array(val)
         np.savetxt(fn, tmp, header=' '.join(['itr'] + list(loss_arrs.keys())))
 
-
-    if options.progress_plot:
+    if progress_plot:
         import matplotlib
         matplotlib.use('Agg')
         from matplotlib import pyplot as plt
@@ -278,7 +278,13 @@ def neural_style(content, styles, output,
         ax.legend()
         ax.set_xlabel("iterations")
         ax.set_ylabel("loss")
-        fig.savefig("{}/progress.png".format(os.path.dirname(options.output)))
+        fig.savefig("{}/progress.png".format(os.path.dirname(output)))
+
+    if output is not None:
+        imsave(output, image)
+
+    # TODO manage the fact that we may have more than one style image
+    return content_image, style_images[0], image
 
 
 def imread(path):
@@ -296,5 +302,6 @@ def imsave(path, img):
     img = np.clip(img, 0, 255).astype(np.uint8)
     Image.fromarray(img).save(path, quality=95)
 
-if __name__ == '__main__':
-    main()
+
+# if __name__ == '__main__':
+#     main()
